@@ -62,6 +62,7 @@ def feature_selection(df_in):
     feature_df_norm = normalize(feature_df)
 
     unique_classes = df_in['class'].unique()
+
     # loop all features and generate array of class separation coefficients
     sep_coeff = []
 
@@ -75,6 +76,7 @@ def feature_selection(df_in):
             # quantify distribution by mean and std (assume Gaussian)
             mu = np.mean(feature_array[class_idx])
             stdev = np.std(feature_array[class_idx])
+            pdb.set_trace()
             class_dist.append({'mu':mu, 'std':stdev})
         # TODO: given all class distributions for current feature, calculate separation score
         pdb.set_trace()
