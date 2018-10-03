@@ -6,14 +6,15 @@ Created on Fri Aug  3 18:46:38 2018
 """
 
 import os
-
 from tkinter import filedialog
+import argparse
 
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
-
 from scipy import stats
+
+from matplotlib import pyplot as plt
+import seaborn as sns
 
 from sklearn import datasets
 
@@ -41,6 +42,24 @@ from sklearn.metrics import accuracy_score
 import pdb
 
 
+def parse_args():
+    '''
+    '''
+    parser = argparse.ArgumentParser(description = "Run quickLearn")
+    parser.add_argument("-m", metavar = "run mode", type = int, dest = "mode")
+    return parser.parse_args()
+
+
+def validate_data(df_in):
+    '''
+    Check whether dataframe is in supported format
+    '''
+    data_valid = False
+    if len(df_in) > 0:
+        if 'class' in df_in.columns:
+            data_valid = True
+    return data_valid
+
 
 def normalize(df_in):
     '''
@@ -52,44 +71,63 @@ def normalize(df_in):
     return df_out
 
 
+def anova1(inp):
+    '''
+    Computes one-way ANOVA
+        Args:
+        Out:
+
+        Assumptions:
+            1. The samples are independent.
+            2. Each sample is from a normally distributed population.
+            3. The population standard deviations of the groups are all equal (i.e. homoscedastic).
+    '''
+
+
+
 def feature_selection(df_in):
     '''
     Determine features contributing to the greatest variance in the data
     '''
+
     selected_features = []
 
     feature_df = df_in.drop(['class'], axis=1)
-    feature_df_norm = normalize(feature_df)
+    feature_df = normalize(feature_df)
 
-    unique_classes = df_in['class'].unique()
+    # TODO: find correlations between features
 
     # loop all features and generate array of class separation coefficients
-    sep_coeff = []
+    p_values = {}
 
     for curr_feature in feature_df.columns:
-        # get array containing all observations of current feature
-        feature_array = feature_df[curr_feature]
-        # initialize dict to store the distribution function of the current feature for each class
-        class_dist = []
-        for curr_class in unique_classes:
-            class_idx = df_in[df_in['class'] == curr_class].index
-            # quantify distribution by mean and std (assume Gaussian)
-            mu = np.mean(feature_array[class_idx])
-            stdev = np.std(feature_array[class_idx])
-            pdb.set_trace()
-            class_dist.append({'mu':mu, 'std':stdev})
-        # TODO: given all class distributions for current feature, calculate separation score
+        # list of panda series representing class distributions for curr_feature
+        samples = []
+        for curr_class in df_in['class'].unique():
+            # get array containing all observations of curr_feature for curr_class
+            feature_array = feature_df[df_in['class'] == curr_class][curr_feature]
+            samples.append(feature_array)
+            sns.distplot(feature_array)
+
+        sns.set_style('darkgrid')
+        plt.show()
+        plt.close()
+
+        # 1-way ANOVA
+        F,p = anova1(samples)
+        F,p = stats.f_oneway(samples)
+
         pdb.set_trace()
-        # percent overlap?
-        sep_score = 0
-        sep_coeff.append(sep_score)
+
+        # save p-value for curr_feature
+        p_values[curr_feature] = 0
 
     # calculate entropy for each feature
     entropy_df = feature_df.apply(lambda x: stats.entropy(x), axis=0)
 
-    # TODO: remove correlated features
-
     return selected_features
+
+
 
 
 def split_data(df_in):
@@ -130,25 +168,31 @@ def model_selection(X_train, X_label):
 
 if __name__ == "__main__":
 
-    # prompt user to select feature table
-    # data_dir = filedialog.askopenfilename(title = "Select data file")
-    # data = pd.read_csv(file_path)
+    df = []
 
-    # construct dataframe from UCI ML Wine Data Set
-    data = datasets.load_wine()
-    df = pd.DataFrame(data.data, columns=data.feature_names)
-    for n in range(0,len(data.target_names)):
-        data.target = [data.target_names[n] if x==n else x for x in data.target]
-    df['class'] = pd.Series(data.target)
+    # get input arguments
+    args_in = parse_args()
 
-    # TODO: check whether dataframe is in supported format
+    if args_in.mode == 1:
+        # prompt user to select feature table
+        data_dir = filedialog.askopenfilename(title = "Select data file")
+        df = pd.read_csv(file_path)
+    else:
+        # construct dataframe from UCI ML Wine Data Set
+        data = datasets.load_wine()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        for n in range(0,len(data.target_names)):
+            data.target = [data.target_names[n] if x==n else x for x in data.target]
+        df['class'] = pd.Series(data.target)
 
-    # rank and select the most relevant features
-    df_filtered = feature_selection(df)
+    if validate_data(df):
 
-    # split data into training and validation sets
-    df_split = split_data(df_filtered)
+        # rank and select the most relevant features
+        df_filtered = feature_selection(df)
 
-    # TODO: loop through models and find the best one
+        # split data into training and validation sets
+        df_split = split_data(df_filtered)
 
-    # TODO: select best-performing model and output classifier
+        # TODO: loop through models and find the best one
+
+        # TODO: select best-performing model and output classifier
