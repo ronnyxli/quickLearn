@@ -71,63 +71,111 @@ def normalize(df_in):
     return df_out
 
 
-def anova1(inp):
+def anova1(feature_vecs):
     '''
-    Computes one-way ANOVA
-        Args:
-        Out:
+    Manual computation of one-way ANOVA
+        Args: feature_vecs = N-length list of pandas Series where N = number of classes
+        Out: F-value
 
         Assumptions:
             1. The samples are independent.
             2. Each sample is from a normally distributed population.
-            3. The population standard deviations of the groups are all equal (i.e. homoscedastic).
+            3. The population standard deviations of the classes are all equal (i.e. homoscedastic).
     '''
 
+    # calculate sum of squares for each class
+    sum_x = []
+    sum_x2 = []
+    n = []
+    SS = []
+    for x in feature_vecs:
+        sum_x.append(x.sum())
+        sum_x2.append( (x**2).sum() )
+        n.append(len(x))
+        SS.append( (x**2).sum() - (x.sum()**2/len(x)) )
+
+    # sum of squares
+    SSb = np.sum(np.divide(sum_x2,n)) - np.sum(sum_x)**2/np.sum(n) # between
+    SSw = np.sum(SS) # within
+    SST = SSb + SSw # total
+
+    # degrees of freedom
+    DFb = len(feature_vecs) - 1 # between
+    DFw = np.sum(n) - len(feature_vecs) # within
+    DFT = DFb + DFw #total
+
+    # mean squares
+    MSb = SSb/DFb # between
+    MSw = SSw/DFw # within
+
+    # F-value
+    F = MSb/MSw
+
+    return F
 
 
 def feature_selection(df_in):
     '''
-    Determine features contributing to the greatest variance in the data
+    Rank and select the features contributing to the greatest variance in the data
+        Args:
+        Returns: Names of the selected features in a list
     '''
 
     selected_features = []
 
     feature_df = df_in.drop(['class'], axis=1)
     feature_df = normalize(feature_df)
+    feature_names = feature_df.columns
 
     # TODO: find correlations between features
 
     # loop all features and generate array of class separation coefficients
-    p_values = {}
+    F_values = []
 
-    for curr_feature in feature_df.columns:
+    for curr_feature in feature_names:
         # list of panda series representing class distributions for curr_feature
         samples = []
         for curr_class in df_in['class'].unique():
             # get array containing all observations of curr_feature for curr_class
             feature_array = feature_df[df_in['class'] == curr_class][curr_feature]
             samples.append(feature_array)
+            '''
             sns.distplot(feature_array)
 
         sns.set_style('darkgrid')
-        plt.show()
+        # plt.show()
+        plt.savefig(curr_feature.replace('/','_') + '.png')
         plt.close()
+        '''
 
         # 1-way ANOVA
-        F,p = anova1(samples)
-        F,p = stats.f_oneway(samples)
+        F = anova1(samples)
+        # F,p = stats.f_oneway(samples)
 
-        pdb.set_trace()
+        # TODO: calculate entropy for curr_feature?
 
-        # save p-value for curr_feature
-        p_values[curr_feature] = 0
+        # save F-value for curr_feature
+        F_values.append(F)
 
-    # calculate entropy for each feature
-    entropy_df = feature_df.apply(lambda x: stats.entropy(x), axis=0)
+    # sort F-values in descending order (sort and flip)
+    F_sorted = np.flip(np.sort(F_values), axis=0)
+    F_sorted_idx = np.flip(np.argsort(F_values), axis=0)
 
-    return selected_features
+    feature_names_sorted = feature_names[F_sorted_idx]
 
+    # define cutoff index as 90% of the energy in the F-values
+    cutoff_idx = np.argmax( np.cumsum(F_sorted)/F_sorted.sum() > 0.90 )
 
+    # plot F-values vs. feature names
+    selected = plt.bar( feature_names_sorted[0:cutoff_idx], F_sorted[0:cutoff_idx] )
+    discarded = plt.bar( feature_names_sorted[cutoff_idx:], F_sorted[cutoff_idx:] )
+    plt.xticks(rotation = 'vertical')
+    plt.ylabel('F-value from one-way ANOVA')
+    plt.legend( (selected, discarded),  ('Selected features', 'Discarded features') )
+    plt.show()
+    plt.close()
+
+    return feature_names_sorted[0:cutoff_idx]
 
 
 def split_data(df_in):
@@ -187,8 +235,11 @@ if __name__ == "__main__":
 
     if validate_data(df):
 
-        # rank and select the most relevant features
-        df_filtered = feature_selection(df)
+        # select the most relevant features
+        selected_features = feature_selection(df)
+
+        X = df[selected_features] # features
+        Y = df['class'] # class labels
 
         # split data into training and validation sets
         df_split = split_data(df_filtered)
