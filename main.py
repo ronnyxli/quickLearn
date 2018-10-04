@@ -34,10 +34,8 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 
 # model evaluation methods
-from sklearn import model_selection
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
 import pdb
 
@@ -178,39 +176,76 @@ def feature_selection(df_in):
     return feature_names_sorted[0:cutoff_idx]
 
 
-def split_data(df_in):
+def split_data(x,y):
     '''
     Split test data in training and validation sets
+        Args:
+            - x is a MxN feature array where M is the number of observations and N is the number of features
+            - y is a Mx1 label array where M is the number of observations
+        Returns:
+            - X is a dict containing feature vectors for training and validation
+            - Y is a dict containing class labels for training and validation
     '''
 
-    num_features = df_in.shape[1]-1
-
-    feature_arrays = df_in.values[:,0:num_features]
-    label_array = df_in.values[:,-1]
     validation_size = 0.20
     seed = 7
-    X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(feature_arrays,label_array,
-                                                                                    test_size=validation_size,
-                                                                                    random_state=seed)
+    X_train, X_validation, Y_train, Y_validation = train_test_split(x.values,\
+                                                        y.values,test_size=validation_size,\
+                                                        random_state=seed)
 
-    # place split data into dict
-    data_out = {'training_data':X_train, 'training_labels':Y_train, 'validation_data':X_validation, 'validation_labels': Y_validation}
+    # store split data in dict
+    X = {'train':X_train, 'validation':X_validation}
+    Y = {'train':Y_train, 'validation':Y_validation}
 
-    return data_out
+    return X,Y
 
 
-def model_selection(X_train, X_label):
+def model_selection(X_train, Y_train):
     '''
+    Selects model using cross-validation on training data
+        Args: numpy ndarrays contains feature vectors and labels
+        Return: Tuple containing name and instance of highest-performing model
     '''
 
-    knn = KNeighborsClassifier()
-    knn.fit(data_split['training_data'], data_split['training_labels'])
-    predictions = knn.predict(data_split['validation_data'])
-    print(accuracy_score(data_split['validation_labels'], predictions))
-    print(confusion_matrix(data_split['validation_labels'], predictions))
-    print(classification_report(data_split['validation_labels'], predictions))
+    # test options and evaluation metric
+    seed = 7
+    scoring = 'accuracy'
 
-    return 0
+    # initialize models as list of tuples
+    models = []
+    models.append( ('LR', LogisticRegression(multi_class='auto', solver='lbfgs')) )
+    models.append( ('LDA', LinearDiscriminantAnalysis()) )
+    models.append( ('KNN', KNeighborsClassifier()) )
+    models.append( ('CART', DecisionTreeClassifier()) )
+    models.append( ('NB', GaussianNB()) )
+    models.append( ('SVM', SVC(gamma='scale')) )
+
+    mean_accuracy = []
+    for name, model in models:
+        # 10-fold cross-validation to determine most accurate model
+        kfold = KFold(n_splits=10, random_state=seed)
+        cv_results = cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
+        # cv_results = array of scores (i.e. accuracy) for each of the 10 cross-validations
+        mean_accuracy.append(cv_results.mean())
+        print('Mean accuracy for ' + name + ' = ' + str(cv_results.mean()))
+
+    return models[np.argmax(mean_accuracy)]
+
+
+def test_model(model, X, Y):
+    '''
+    Fits a model to validation data
+        Args: model = tuple containing name and instance of chosen model
+        Returns: model instance
+    '''
+
+    model[1].fit(X['train'], Y['train'])
+    predictions = model[1].predict(X['validation'])
+    print(accuracy_score(Y['validation'], predictions))
+    print(confusion_matrix(Y['validation'], predictions))
+    print(classification_report(Y['validation'], predictions))
+
+    return model[1]
 
 
 
@@ -223,7 +258,7 @@ if __name__ == "__main__":
 
     if args_in.mode == 1:
         # prompt user to select feature table
-        data_dir = filedialog.askopenfilename(title = "Select data file")
+        file_path = filedialog.askopenfilename(title = "Select data file")
         df = pd.read_csv(file_path)
     else:
         # construct dataframe from UCI ML Wine Data Set
@@ -238,12 +273,11 @@ if __name__ == "__main__":
         # select the most relevant features
         selected_features = feature_selection(df)
 
-        X = df[selected_features] # features
-        Y = df['class'] # class labels
+        # split data into training and validation sets given features and class labels
+        X,Y = split_data( df[selected_features], df['class'] )
 
-        # split data into training and validation sets
-        df_split = split_data(df_filtered)
+        # loop through models and find the best one
+        model_out = model_selection(X['train'], Y['train'])
 
-        # TODO: loop through models and find the best one
-
-        # TODO: select best-performing model and output classifier
+        # test selected model and output classifier
+        final_model = test_model(model_out, X, Y)
