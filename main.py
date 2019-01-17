@@ -5,18 +5,20 @@ Created on Fri Aug  3 18:46:38 2018
 @author: rli
 """
 
+# file/data input
 import os
 from tkinter import filedialog
 import argparse
+from sklearn import datasets
 
+# quantitative operations
 import numpy as np
 import pandas as pd
 from scipy import stats
 
+# plotting/visualization
 from matplotlib import pyplot as plt
 import seaborn as sns
-
-from sklearn import datasets
 
 # feature selection methods
 from sklearn.feature_selection import VarianceThreshold
@@ -26,17 +28,19 @@ from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
 # machine learning models
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
+from keras.models import Sequential
 
 # model evaluation methods
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 
+# debugging
 import pdb
 
 
@@ -53,8 +57,8 @@ def validate_data(df_in):
     Check whether dataframe is in supported format
     '''
     data_valid = False
-    if len(df_in) > 0:
-        if 'class' in df_in.columns:
+    if (len(df_in) > 0) & (len(df_in.columns) > 1):
+        if 'label' in df_in.columns:
             data_valid = True
     return data_valid
 
@@ -63,10 +67,20 @@ def normalize(df_in):
     '''
     z-score normalization - subtract mean, divide by std
     '''
-    # replace each column with array of normalized values
+
     # TODO: check that each column is a pandas Series of numbers
+
+    # loop all columns (i.e. features) to calculate mean and std of each
+    dict_out = {}
+    for feature in df_in:
+        feature_mean = np.mean(df_in[feature])
+        feature_std = np.std(df_in[feature])
+        dict_out[feature] = {'mean':feature_mean, 'std':feature_std}
+
+    # replace each column with array of normalized values
     df_out = df_in.apply(lambda x: (x-np.mean(x))/np.std(x), axis=0)
-    return df_out
+
+    return df_out, dict_out
 
 
 def anova1(feature_vecs):
@@ -112,39 +126,37 @@ def anova1(feature_vecs):
     return F
 
 
-def feature_selection(df_in):
+def select_features(df_in, label_array, PLOT):
     '''
     Rank and select the features contributing to the greatest variance in the data
-        Args:
-        Returns: Names of the selected features in a list
+        Args: Dataframe of normalizd, feature vectors (df_in), series of labels (label_array),
+            binary flag to plot feature distributions (PLOT)
+        Returns: List of names of the selected features
     '''
 
+    feature_names = df_in.columns
     selected_features = []
-
-    feature_df = df_in.drop(['class'], axis=1)
-    feature_df = normalize(feature_df)
-    feature_names = feature_df.columns
 
     # TODO: find correlations between features
 
     # loop all features and generate array of class separation coefficients
     F_values = []
-
     for curr_feature in feature_names:
+
         # list of panda series representing class distributions for curr_feature
         samples = []
-        for curr_class in df_in['class'].unique():
+        for curr_class in label_array.unique():
             # get array containing all observations of curr_feature for curr_class
-            feature_array = feature_df[df_in['class'] == curr_class][curr_feature]
+            feature_array = df_in[label_array == curr_class][curr_feature]
             samples.append(feature_array)
-            '''
-            sns.distplot(feature_array)
+            if PLOT:
+                sns.distplot(feature_array)
 
-        sns.set_style('darkgrid')
-        # plt.show()
-        plt.savefig(curr_feature.replace('/','_') + '.png')
-        plt.close()
-        '''
+        if PLOT:
+            sns.set_style('darkgrid')
+            plt.show()
+            # plt.savefig(curr_feature.replace('/','_') + '.png')
+            plt.close()
 
         # 1-way ANOVA
         F = anova1(samples)
@@ -176,19 +188,27 @@ def feature_selection(df_in):
     return feature_names_sorted[0:cutoff_idx]
 
 
-def split_data(x,y):
+def split_data(x, y, x_dist, validation_size):
     '''
     Split test data in training and validation sets
         Args:
-            - x is a MxN feature array where M is the number of observations and N is the number of features
+            - x is a MxN feature array where M is the number of observations and
+                N is the number of features
             - y is a Mx1 label array where M is the number of observations
+            - x_dist is a dictionary (where each key is a feature) that describes
+                the mean and std of the features
+            - validation_size is the percentage of the entire dataset to set aside
+                for validation
         Returns:
             - X is a dict containing feature vectors for training and validation
             - Y is a dict containing class labels for training and validation
     '''
 
-    validation_size = 0.20
-    seed = 7
+    # normalize using pre-calculated feature distributions
+    for feature in x:
+        x[feature] = (x[feature] - x_dist[feature]['mean']) / x_dist[feature]['std']
+
+    seed = 1
     X_train, X_validation, Y_train, Y_validation = train_test_split(x.values,\
                                                         y.values,test_size=validation_size,\
                                                         random_state=seed)
@@ -200,20 +220,20 @@ def split_data(x,y):
     return X,Y
 
 
-def model_selection(X_train, Y_train):
+def select_model(X_train, Y_train):
     '''
-    Selects model using cross-validation on training data
+    Select an optimal model using 10-fold cross-validation on training data
         Args: numpy ndarrays contains feature vectors and labels
         Return: Tuple containing name and instance of highest-performing model
     '''
 
     # test options and evaluation metric
-    seed = 7
     scoring = 'accuracy'
 
     # initialize models as list of tuples
     models = []
-    models.append( ('LR', LogisticRegression(multi_class='auto', solver='lbfgs')) )
+    # models.append( ('LinR', LinearRegression()) )
+    models.append( ('LogR', LogisticRegression(multi_class='auto', solver='lbfgs')) )
     models.append( ('LDA', LinearDiscriminantAnalysis()) )
     models.append( ('KNN', KNeighborsClassifier()) )
     models.append( ('CART', DecisionTreeClassifier()) )
@@ -223,7 +243,7 @@ def model_selection(X_train, Y_train):
     mean_accuracy = []
     for name, model in models:
         # 10-fold cross-validation to determine most accurate model
-        kfold = KFold(n_splits=10, random_state=seed)
+        kfold = KFold(n_splits=10, random_state=1, shuffle=True)
         cv_results = cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
         # cv_results = array of scores (i.e. accuracy) for each of the 10 cross-validations
         mean_accuracy.append(cv_results.mean())
@@ -235,17 +255,23 @@ def model_selection(X_train, Y_train):
 def test_model(model, X, Y):
     '''
     Fits a model to validation data
-        Args: model = tuple containing name and instance of chosen model
-        Returns: model instance
+        Args:
+            model = tuple containing name and instance of chosen model
+            X = dict containing train and validation feature vectors
+            Y = dict containing train and validation labels
     '''
-
     model[1].fit(X['train'], Y['train'])
     predictions = model[1].predict(X['validation'])
-    print(accuracy_score(Y['validation'], predictions))
+
+    # print performance results
+    print('\nPerformance results on validation data using ' + model[0] + ':')
+    print('\nAccuracy = ' + str(accuracy_score(Y['validation'], predictions)))
+    print('\nConfusion matrix:')
     print(confusion_matrix(Y['validation'], predictions))
+    print('\nClassification report:')
     print(classification_report(Y['validation'], predictions))
 
-    return model[1]
+    return True
 
 
 
@@ -258,26 +284,49 @@ if __name__ == "__main__":
 
     if args_in.mode == 1:
         # prompt user to select feature table
-        file_path = filedialog.askopenfilename(title = "Select data file")
-        df = pd.read_csv(file_path)
+        # file_path = filedialog.askopenfilename(title = "Select data file")
+        file_path = 'C:/Users/rli/Documents/PROTEUS/Bitbucket Repos/poc-algo/Context-awareness/Patch on off body classifier/16JAN2018-20FEB2018_features.csv'
+        df1 = pd.read_csv(file_path)
+
+        file_path2 = 'C:/Users/rli/Documents/PROTEUS/Bitbucket Repos/poc-algo/Context-awareness/Patch on off body classifier/31MAR2018-29MAY2018_features.csv'
+        df2 = pd.read_csv(file_path2)
+        df = pd.concat([df1,df2]).reset_index(drop=True)
+
     else:
         # construct dataframe from UCI ML Wine Data Set
         data = datasets.load_wine()
         df = pd.DataFrame(data.data, columns=data.feature_names)
         for n in range(0,len(data.target_names)):
             data.target = [data.target_names[n] if x==n else x for x in data.target]
-        df['class'] = pd.Series(data.target)
+        df['label'] = pd.Series(data.target)
 
     if validate_data(df):
 
+        # remove rows containing NaN
+        df = df.drop(df[df.isnull().any(axis=1)].index)
+
+        # TODO: handle class imbalance
+
+        # normalize
+        feature_df_norm, feature_dist = normalize(df.drop(['label'],axis=1))
+
         # select the most relevant features
-        selected_features = feature_selection(df)
+        selected_features = select_features(feature_df_norm, df['label'], False)
 
         # split data into training and validation sets given features and class labels
-        X,Y = split_data( df[selected_features], df['class'] )
+        X,Y = split_data( df[selected_features], df['label'], feature_dist, 0.20)
 
         # loop through models and find the best one
-        model_out = model_selection(X['train'], Y['train'])
+        model_out = select_model(X['train'], Y['train'])
+
+        # TODO: hyperparameter tuning
 
         # test selected model and output classifier
-        final_model = test_model(model_out, X, Y)
+        test_model(model_out, X, Y)
+
+        # TODO: export model
+
+    else:
+
+        pdb.set_trace()
+        raise Exception('Input data invalid')
