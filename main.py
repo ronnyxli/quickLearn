@@ -284,14 +284,8 @@ if __name__ == "__main__":
 
     if args_in.mode == 1:
         # prompt user to select feature table
-        # file_path = filedialog.askopenfilename(title = "Select data file")
-        file_path = 'C:/Users/rli/Documents/PROTEUS/Bitbucket Repos/poc-algo/Context-awareness/Patch on off body classifier/16JAN2018-20FEB2018_features.csv'
-        df1 = pd.read_csv(file_path)
-
-        file_path2 = 'C:/Users/rli/Documents/PROTEUS/Bitbucket Repos/poc-algo/Context-awareness/Patch on off body classifier/31MAR2018-29MAY2018_features.csv'
-        df2 = pd.read_csv(file_path2)
-        df = pd.concat([df1,df2]).reset_index(drop=True)
-
+        file_path = filedialog.askopenfilename(title = "Select data file")
+        df = pd.read_csv(file_path)
     else:
         # construct dataframe from UCI ML Wine Data Set
         data = datasets.load_wine()
@@ -328,5 +322,4 @@ if __name__ == "__main__":
 
     else:
 
-        pdb.set_trace()
         raise Exception('Input data invalid')
