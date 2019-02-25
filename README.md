@@ -1,7 +1,7 @@
 # quickLearn
 Trains and validates a basic machine learning model for classification given a table of feature vectors and corresponding labels.
 
-Required python modules: numpy, pandas, matplotlib, sklearn
+Required python modules: numpy, pandas, matplotlib, sklearn, scipy
 
 ## Requirements for input data:
 1) .csv format

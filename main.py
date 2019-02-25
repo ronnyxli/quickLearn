@@ -34,7 +34,6 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
-from keras.models import Sequential
 
 # model evaluation methods
 from sklearn.model_selection import train_test_split, KFold, cross_val_score
@@ -150,10 +149,12 @@ def select_features(df_in, label_array, PLOT):
             feature_array = df_in[label_array == curr_class][curr_feature]
             samples.append(feature_array)
             if PLOT:
-                sns.distplot(feature_array)
+                sns.distplot(feature_array, label=curr_class)
 
         if PLOT:
-            sns.set_style('darkgrid')
+            # sns.set_style('darkgrid')
+            plt.legend(label_array.unique())
+            plt.grid('on')
             plt.show()
             # plt.savefig(curr_feature.replace('/','_') + '.png')
             plt.close()
@@ -162,7 +163,7 @@ def select_features(df_in, label_array, PLOT):
         F = anova1(samples)
         # F,p = stats.f_oneway(samples)
 
-        # TODO: calculate entropy for curr_feature?
+        # TODO: calculate entropy and/or ROC AUC for curr_feature instead?
 
         # save F-value for curr_feature
         F_values.append(F)
@@ -173,13 +174,15 @@ def select_features(df_in, label_array, PLOT):
 
     feature_names_sorted = feature_names[F_sorted_idx]
 
+    # TODO: need smarter way to determine criterion for discarding features
+
     # define cutoff index as 90% of the energy in the F-values
-    cutoff_idx = np.argmax( np.cumsum(F_sorted)/F_sorted.sum() > 0.90 )
+    cutoff_idx = np.argmax( np.cumsum(F_sorted)/F_sorted.sum() > 0.90 ) + 1
 
     # plot F-values vs. feature names
     selected = plt.bar( feature_names_sorted[0:cutoff_idx], F_sorted[0:cutoff_idx] )
     discarded = plt.bar( feature_names_sorted[cutoff_idx:], F_sorted[cutoff_idx:] )
-    plt.xticks(rotation = 'vertical')
+    plt.xticks(rotation=20)
     plt.ylabel('F-value from one-way ANOVA')
     plt.legend( (selected, discarded),  ('Selected features', 'Discarded features') )
     plt.show()
@@ -227,12 +230,13 @@ def select_model(X_train, Y_train):
         Return: Tuple containing name and instance of highest-performing model
     '''
 
+    num_features = X_train.shape[1]
+
     # test options and evaluation metric
     scoring = 'accuracy'
 
     # initialize models as list of tuples
     models = []
-    # models.append( ('LinR', LinearRegression()) )
     models.append( ('LogR', LogisticRegression(multi_class='auto', solver='lbfgs')) )
     models.append( ('LDA', LinearDiscriminantAnalysis()) )
     models.append( ('KNN', KNeighborsClassifier()) )
@@ -308,7 +312,7 @@ if __name__ == "__main__":
         selected_features = select_features(feature_df_norm, df['label'], False)
 
         # split data into training and validation sets given features and class labels
-        X,Y = split_data( df[selected_features], df['label'], feature_dist, 0.20)
+        X,Y = split_data( df[selected_features], df['label'], feature_dist, 0.20 )
 
         # loop through models and find the best one
         model_out = select_model(X['train'], Y['train'])
