@@ -191,14 +191,14 @@ def select_features(df_in, label_array, PLOT):
     return feature_names_sorted[0:cutoff_idx]
 
 
-def split_data(x, y, x_dist, validation_size):
+def split_data(x, y, x_stats, validation_size):
     '''
     Split test data in training and validation sets
         Args:
             - x is a MxN feature array where M is the number of observations and
                 N is the number of features
             - y is a Mx1 label array where M is the number of observations
-            - x_dist is a dictionary (where each key is a feature) that describes
+            - x_stats is a dictionary (where each key is a feature) that describes
                 the mean and std of the features
             - validation_size is the percentage of the entire dataset to set aside
                 for validation
@@ -209,7 +209,7 @@ def split_data(x, y, x_dist, validation_size):
 
     # normalize using pre-calculated feature distributions
     for feature in x:
-        x[feature] = (x[feature] - x_dist[feature]['mean']) / x_dist[feature]['std']
+        x[feature] = (x[feature] - x_stats[feature]['mean']) / x_stats[feature]['std']
 
     seed = 1
     X_train, X_validation, Y_train, Y_validation = train_test_split(x.values,\
@@ -288,7 +288,9 @@ if __name__ == "__main__":
 
     if args_in.mode == 1:
         # prompt user to select feature table
-        file_path = filedialog.askopenfilename(title = "Select data file")
+        # file_path = filedialog.askopenfilename(title = "Select data file")
+        # df = pd.read_csv(file_path)
+        file_path = 'C:/Users/rli/Box/Physiologic Algorithms/Ronny/DATA/Labeled ECR data/wavelet_features.csv'
         df = pd.read_csv(file_path)
     else:
         # construct dataframe from UCI ML Wine Data Set
@@ -305,17 +307,17 @@ if __name__ == "__main__":
 
         # TODO: handle class imbalance
 
-        # normalize
-        feature_df_norm, feature_dist = normalize(df.drop(['label'],axis=1))
+        # normalize feature space
+        feature_df_norm, feature_stats = normalize(df.drop(['label'],axis=1))
 
-        # select the most relevant features
+        # select the strongest features
         selected_features = select_features(feature_df_norm, df['label'], False)
 
-        # split data into training and validation sets given features and class labels
-        X,Y = split_data( df[selected_features], df['label'], feature_dist, 0.20 )
+        # split data 80/20 into training and validation sets given features and class labels
+        X,Y = split_data( df[selected_features], df['label'], feature_stats, 0.20 )
 
         # loop through models and find the best one
-        model_out = select_model(X['train'], Y['train'])
+        model_out = select_model( X['train'], Y['train'] )
 
         # TODO: hyperparameter tuning
 
