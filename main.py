@@ -288,9 +288,7 @@ if __name__ == "__main__":
 
     if args_in.mode == 1:
         # prompt user to select feature table
-        # file_path = filedialog.askopenfilename(title = "Select data file")
-        # df = pd.read_csv(file_path)
-        file_path = 'C:/Users/rli/Box/Physiologic Algorithms/Ronny/DATA/Labeled ECR data/wavelet_features.csv'
+        file_path = filedialog.askopenfilename(title = "Select data file")
         df = pd.read_csv(file_path)
     else:
         # construct dataframe from UCI ML Wine Data Set
